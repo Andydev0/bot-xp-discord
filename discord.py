@@ -15,8 +15,6 @@ exp_per_thread = 15
 exp_per_level = 20
 
 
-user_levels = {}  # Dicionário para armazenar os níveis e xp dos usuários
-
 # Lista de canais excluídos onde o sistema de níveis não funcionará
 #excluded_channels = [1143327353519480952, 1143347662054236322, 1143368647390277805, 1143370778767806504, 1143502875071352913]  # Substitua pelos IDs reais dos canais
 
@@ -24,16 +22,16 @@ user_levels = {}  # Dicionário para armazenar os níveis e xp dos usuários
 
 # Função para salvar os dados de experiência em um arquivo JSON
 def save_user_levels(filename, user_levels_data):
-    user_data_to_save = {}
+    user_levels = {}
 
     for user_id, data in user_levels_data.items():
-        user_data_to_save[user_id] = {
+        user_levels[user_id] = {
             "exp": data["exp"],
             "level": data["level"]
         }
 
     with open(filename, 'w') as file:
-        json.dump(user_data_to_save, file, indent=4)
+        json.dump(user_levels, file, indent=4)
 
  # Função para carregar os dados de experiência de um arquivo JSON
 def load_user_levels(filename):
@@ -61,14 +59,16 @@ processed_threads = set()
 async def on_thread_create(thread):
     if thread.id not in processed_threads:  # Verifica se o tópico já foi processado
         user_id = thread.owner_id
-        if user_id not in user_levels:
-            user_levels[user_id] = {'exp': 0, 'level': 1}
-        user_levels[user_id]['exp'] += exp_per_thread
-        while user_levels[user_id]['exp'] >= exp_per_level:
-            user_levels[user_id]['exp'] -= exp_per_level
-            user_levels[user_id]['level'] += 1
-            await thread.send(f"Parabéns, <@{user_id}>! Você alcançou o nível {user_levels[user_id]['level']}!")
-            save_user_levels(json_filename, user_levels)
+        dados = load_user_levels(json_filename)
+
+        if user_id not in dados:
+            dados[user_id] = {'exp': 0, 'level': 1}
+        dados[user_id]['exp'] += exp_per_thread
+        while dados[user_id]['exp'] >= exp_per_level:
+            dados[user_id]['exp'] -= exp_per_level
+            dados[user_id]['level'] += 1
+            await thread.send(f"Parabéns, <@{user_id}>! Você alcançou o nível {dados[user_id]['level']}!")
+            save_user_levels(json_filename, dados)
         processed_threads.add(thread.id)  # Adiciona o tópico ao conjunto de tópicos processados
 
 
@@ -78,42 +78,34 @@ async def on_thread_create(thread):
 async def on_message(message):
     if isinstance(message.channel, discord.Thread):
         if message.author != bot.user and len(message.content) >= 10:
-            user_id = message.author.id
-            if user_id not in user_levels:
-                user_levels[user_id] = {'exp': 0, 'level': 1}
-            
+            user_id = str(message.author.id)
+
             now_utc = datetime.datetime.utcnow()
             created_at_utc = message.channel.created_at.replace(tzinfo=None)
-            
+
             time_difference = now_utc - created_at_utc
             if time_difference <= datetime.timedelta(minutes=1):
-                user_levels[user_id]['exp'] += 10
+                await adicionar_xp(user_id, 10, message.channel, message.author)
             elif time_difference <= datetime.timedelta(minutes=2):
-                user_levels[user_id]['exp'] += 9
+                await adicionar_xp(user_id, 9, message.channel, message.author)
             elif time_difference <= datetime.timedelta(minutes=3):
-                user_levels[user_id]['exp'] += 8
+                await adicionar_xp(user_id, 8, message.channel, message.author) 
             elif time_difference <= datetime.timedelta(minutes=4):
-                user_levels[user_id]['exp'] += 7
+                await adicionar_xp(user_id, 7, message.channel, message.author) 
             elif time_difference <= datetime.timedelta(minutes=5):
-                user_levels[user_id]['exp'] += 6
+                await adicionar_xp(user_id, 6, message.channel, message.author) 
             elif time_difference <= datetime.timedelta(minutes=6):
-                user_levels[user_id]['exp'] += 5
+                await adicionar_xp(user_id, 5, message.channel, message.author) 
             elif time_difference <= datetime.timedelta(minutes=7):
-                user_levels[user_id]['exp'] += 4
+                await adicionar_xp(user_id, 4, message.channel, message.author) 
             elif time_difference <= datetime.timedelta(minutes=8):
-                user_levels[user_id]['exp'] += 3
+                await adicionar_xp(user_id, 3, message.channel, message.author) 
             elif time_difference <= datetime.timedelta(minutes=9):
-                user_levels[user_id]['exp'] += 2                            
+                await adicionar_xp(user_id, 2, message.channel, message.author)
             else:
-                user_levels[user_id]['exp'] += 1
-            
-            while user_levels[user_id]['exp'] >= exp_per_level:
-                user_levels[user_id]['exp'] -= exp_per_level
-                user_levels[user_id]['level'] += 1
-                await message.channel.send(f"Parabéns, {message.author.mention}! Você alcançou o nível {user_levels[user_id]['level']}!")
+                await adicionar_xp(user_id, 1, message.channel, message.author) 
 
     await bot.process_commands(message)
-    save_user_levels(json_filename, user_levels)
 
 
 
@@ -163,7 +155,28 @@ async def top(ctx):
             leaderboard_message += f"{index}. *Usuário não encontrado* - Nível {data['level']}\n"
     
     await ctx.send(leaderboard_message)
+    save_user_levels(json_filename, user_levels)
 
 
-bot.run('token')
+async def adicionar_xp(user_id, xp_ganha, canal, author):
+    dados = load_user_levels(json_filename)
+    if user_id not in dados:
+        dados[user_id] = {'exp': 0, 'level': 1}
+    else:
+        print("já esta no geison")
+    dados[user_id]['exp'] += xp_ganha
+    save_user_levels(json_filename, dados)
+    print(f"foi adicionado para o user: {user_id} XP: {xp_ganha}")
+    await adicionar_lvl(user_id, canal, author)
+    
+
+async def adicionar_lvl(user_id, canal, author):
+    dados = load_user_levels(json_filename)
+    while dados[user_id]['exp'] >= exp_per_level:
+        dados[user_id]['exp'] -= exp_per_level
+        dados[user_id]['level'] += 1
+        await canal.send(f"Parabéns, {author.mention}! Você alcançou o nível {dados[user_id]['level']}!")
+    save_user_levels(json_filename, dados)
+
+bot.run('MTE0MzMwOTczMjA5OTE0MTY0Mg.GsoHKr.3j0sJO-c18in5EQwgJInnlCCKrm3Rbk9JtcCh0')
 
