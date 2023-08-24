@@ -178,5 +178,5 @@ async def adicionar_lvl(user_id, canal, author):
         await canal.send(f"Parabéns, {author.mention}! Você alcançou o nível {dados[user_id]['level']}!")
     save_user_levels(json_filename, dados)
 
-bot.run('MTE0MzMwOTczMjA5OTE0MTY0Mg.GsoHKr.3j0sJO-c18in5EQwgJInnlCCKrm3Rbk9JtcCh0')
+bot.run('---')
 
