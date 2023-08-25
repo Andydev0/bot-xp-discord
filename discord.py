@@ -7,6 +7,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.typing = False
 intents.presences = False
+intents.members = True
 
 
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -30,7 +31,11 @@ def save_user_levels(filename, user_levels_data):
     user_levels = {}
 
     for user_id, data in user_levels_data.items():
+        user = bot.get_user(int(user_id))
+        username = user.name if user else "Usuario invalido"
+
         user_levels[user_id] = {
+            "username": username,
             "exp": data["exp"],
             "level": data["level"],
             "data_xp": data.get("data_xp", [])
@@ -47,6 +52,10 @@ def load_user_levels(filename):
             return json.load(file)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}  # Retorna um dicionário vazio se o arquivo não existir
+    
+def get_username(user_id):
+    user = bot.get_user(int(user_id))
+    return user.name if user else "Usuario invalido"
 
 @bot.event
 async def on_ready():
@@ -54,7 +63,7 @@ async def on_ready():
 processed_threads = set()
 
     
-@bot.event
+@bot.event #xp ao criar um topico
 async def on_thread_create(thread):
     if thread.id not in processed_threads:  # Verifica se o tópico já foi processado
         user_id = thread.owner_id
