@@ -14,6 +14,11 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 exp_per_thread = 15
 exp_per_level = 20
 
+# Nome do arquivo JSON para armazenar os dados de experiência
+json_filename = 'user_levels.json'    
+
+processed_threads = set()
+
 
 # Lista de canais excluídos onde o sistema de níveis não funcionará
 #excluded_channels = [1143327353519480952, 1143347662054236322, 1143368647390277805, 1143370778767806504, 1143502875071352913]  # Substitua pelos IDs reais dos canais
@@ -27,11 +32,13 @@ def save_user_levels(filename, user_levels_data):
     for user_id, data in user_levels_data.items():
         user_levels[user_id] = {
             "exp": data["exp"],
-            "level": data["level"]
+            "level": data["level"],
+            "data_xp": data.get("data_xp", [])
         }
 
     with open(filename, 'w') as file:
         json.dump(user_levels, file, indent=4)
+
 
  # Função para carregar os dados de experiência de um arquivo JSON
 def load_user_levels(filename):
@@ -40,14 +47,6 @@ def load_user_levels(filename):
             return json.load(file)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}  # Retorna um dicionário vazio se o arquivo não existir
-
-# Nome do arquivo JSON para armazenar os dados de experiência
-json_filename = 'user_levels.json'
-
-# Carrega os dados de experiência existentes ou cria um dicionário vazio
-user_levels = load_user_levels(json_filename)       
-
-processed_threads = set()
 
 @bot.event
 async def on_ready():
@@ -112,62 +111,61 @@ async def on_message(message):
 @bot.command()
 async def level(ctx):
     user_id = ctx.author.id
-    if user_id in user_levels:
-        await ctx.send(f"{ctx.author.mention}, seu nível é {user_levels[user_id]['level']}.")
+    dados = load_user_levels(json_filename)
+    if user_id in dados:
+        await ctx.send(f"{ctx.author.mention}, seu nível é {dados[user_id]['level']}.")
     else:
         await ctx.send(f"{ctx.author.mention}, você ainda não possui um nível.")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def dar_xp(ctx, user: discord.User, xp_amount: int):
-    # Verifica se o usuário tem permissões de administrador para usar o comando
     if ctx.author.guild_permissions.administrator:
-        if user.id not in user_levels:
-            user_levels[user.id] = {'exp': 0, 'level': 1}
-        
-        user_levels[user.id]['exp'] += xp_amount
-        while user_levels[user.id]['exp'] >= exp_per_level:
-            user_levels[user.id]['exp'] -= exp_per_level
-            user_levels[user.id]['level'] += 1
-            await ctx.send(f"XP atribuído a {user.mention}. {user.mention} agora está no nível {user_levels[user.id]['level']}.")
-        
-        # Salva os dados de experiência após a modificação
-        save_user_levels(json_filename, user_levels)
+        canal = ctx.message.channel
+        await adicionar_xp(str(user.id), xp_amount, canal, user)
     else:
         await ctx.send("Você não tem permissão para usar este comando.")
 
+
 @bot.command()
 async def top(ctx):
-    sorted_users = sorted(user_levels.items(), key=lambda x: x[1]['level'], reverse=True)
-    top_users = sorted_users[:10]  # Pega os 10 primeiros usuários da lista ordenada
-    
+    dados = load_user_levels(json_filename)
+    sorted_users = sorted(dados.items(), key=lambda x: x[1]['level'], reverse=True)
+    top_users = sorted_users[:10]
+
     leaderboard_message = "Top 10 usuários com mais níveis:\n"
-    
+
     for index, (user_id, data) in enumerate(top_users, start=1):
         try:
-            user = await bot.fetch_user(user_id)  # Obtém o objeto de usuário usando o ID
+            user = await bot.fetch_user(user_id)
         except discord.NotFound:
             user = None
-        
+
         if user:
-            leaderboard_message += f"{index}. {user.mention} - Nível {data['level']}\n"
+            data_xp = data.get('data_xp', [])
+            leaderboard_message += f"{index}. {user.mention} - Nível {data['level']}, XP ganho: {sum(entry['xp_ganha'] for entry in data_xp)}\n"
         else:
             leaderboard_message += f"{index}. *Usuário não encontrado* - Nível {data['level']}\n"
-    
+
     await ctx.send(leaderboard_message)
-    save_user_levels(json_filename, user_levels)
+
 
 
 async def adicionar_xp(user_id, xp_ganha, canal, author):
     dados = load_user_levels(json_filename)
     if user_id not in dados:
-        dados[user_id] = {'exp': 0, 'level': 1}
+        dados[user_id] = {'exp': 0, 'level': 1, 'data_xp': []}
     else:
         print("já esta no geison")
     dados[user_id]['exp'] += xp_ganha
+    dados[user_id]['data_xp'].append({
+        "xp_ganha": xp_ganha,
+        "data_da_xp": datetime.datetime.now().strftime("%d/%m/%Y-%H:%M:%S")
+    })
     save_user_levels(json_filename, dados)
     print(f"foi adicionado para o user: {user_id} XP: {xp_ganha}")
     await adicionar_lvl(user_id, canal, author)
+
     
 
 async def adicionar_lvl(user_id, canal, author):
